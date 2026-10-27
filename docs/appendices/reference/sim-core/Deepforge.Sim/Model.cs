@@ -68,6 +68,22 @@ namespace Deepforge.Sim
         public readonly int[] Banked = new int[32];
         public int MonstersDefeated;
 
+        /// <summary>Deep copy. Monsters are structs, so copying the list copies them.</summary>
+        public RunState Clone()
+        {
+            var c = new RunState
+            {
+                Floor = Floor, Turn = Turn, PlayerX = PlayerX, PlayerY = PlayerY, Hp = Hp, Oil = Oil,
+                BlastReadyAtTurn = BlastReadyAtTurn, Status = Status, MonstersDefeated = MonstersDefeated,
+            };
+            System.Array.Copy(Tiles, c.Tiles, Tiles.Length);
+            System.Array.Copy(TileHp, c.TileHp, TileHp.Length);
+            System.Array.Copy(Broken, c.Broken, Broken.Length);
+            System.Array.Copy(Banked, c.Banked, Banked.Length);
+            c.Monsters.AddRange(Monsters);
+            return c;
+        }
+
         public static int Index(int x, int y) => y * Width + x;
         public static bool InBounds(int x, int y) => x >= 0 && x < Width && y >= 0 && y < Height;
     }

@@ -1,45 +1,71 @@
 # 12 · Client Architecture (Unity, Android)
 
+This document is the architecture overview. The detailed design (screens, flows, delve presentation, input, Unity-layer code, asset specs and verification) is in [21 · Unity Client Detailed Design](21-unity-client-detailed-design.md). The engine-agnostic **client core** described here exists as tested reference code in [`appendices/reference/client-core`](appendices/reference/client-core/): 45 tests, including end-to-end protocol tests against a rule-enforcing fake server.
+
 ## 12.1 Goals and constraints
 
 | Goal | Consequence |
 |---|---|
 | A tap feels instant (FR-DLV-003) | The delve runs on the local simulation; the network never sits between a tap and its animation |
-| The server is authoritative | The client holds **snapshots** from the server plus a local run in progress. It never mutates balances locally, except for optimistic UI that is reconciled on response |
+| The server is authoritative | The client holds **snapshots** from the server plus a local run in progress. It never mutates balances locally |
 | Portrait, one-handed (ADR-003) | Bottom navigation, thumb-zone actions, 48 dp targets |
-| Small team | Few dependencies, one architecture style, testable without a device where possible |
+| Small team | Few dependencies, one architecture style, most logic testable **without the Unity Editor** |
 | Shared C# with the server (ADR-012) | `Deepforge.Sim` and `Deepforge.Contracts` are local UPM packages; Unity compiles the same source the server does |
 
-## 12.2 Project structure
+## 12.2 Two layers
+
+```
+┌──────────────────────── Unity layer (thin; needs the Editor) ─────────────────────────┐
+│ Views (MonoBehaviour, UGUI)  ·  Controllers (DelveController, BootController …)        │
+│ Platform adapters: UnityWebRequestTransport, PlayBillingStoreAdapter, Keystore,        │
+│ haptics, push, PGS/LINE sign-in  ·  Composition root (VContainer)                      │
+└──────────────────────────────────┬────────────────────────────────────────────────────┘
+                                   │ interfaces: IHttpTransport, IStoreAdapter, IRunLogStore,
+                                   │ IMonotonicClock, IAuthSession, IDelay
+┌──────────────────────────────────▼──── Client core (engine-agnostic; tested with dotnet) ┐
+│ ApiClient · ServerClock · SnapshotStore · LocalRun · DelveSyncService · Previews ·       │
+│ Travel · PresentationScheduler · ContentCache · PurchaseFlow · BootPlanner ·             │
+│ NumberFormatter · FileRunLogStore                                                        │
+└──────────────────────────────────┬──────────────────────────────────────────────────────┘
+                                   │
+                  Deepforge.Sim (rules)  ·  Deepforge.Contracts (DTOs, error codes)
+```
+
+**Why split:**
+- Everything that can be wrong in subtle ways (retries, idempotency, resume after a kill, the checkpoint protocol, previews, purchase reconciliation, number formatting) lives in plain C#. CI tests it in seconds, with no Editor licence and no device.
+- The same code drives load-test bots and the admin replay viewer.
+- The Unity layer is kept to rendering, input and platform calls.
+
+**Threading contract.** The client core is **single-threaded**: call it from Unity's main thread, and it never uses `ConfigureAwait(false)`, so every continuation resumes on the main thread. This keeps `UnityWebRequest` legal (main thread only) and lets `LocalRun` and the stores run without locks. A test proves it under a single-threaded synchronization context, using a transport and delay that deliberately hop threads. Re-introducing one `ConfigureAwait(false)` makes the test fail ([21 §21.2](21-unity-client-detailed-design.md#212-two-layer-client)).
+
+## 12.3 Project structure
 
 ```
 client/
-  Assets/
-    _Project/
-      Scripts/
-        App/            Deepforge.Client.App.asmdef        – composition root (VContainer LifetimeScopes), boot flow
-        Core/           Deepforge.Client.Core.asmdef       – snapshot store, event bus, clock (server-synced), errors
-        Net/            Deepforge.Client.Net.asmdef        – ApiClient, auth, idempotency, WebSocket
-        Content/        Deepforge.Client.Content.asmdef    – content bundle download/verify/cache, typed lookups
-        Delve/          Deepforge.Client.Delve.asmdef      – LocalRun, presenters, input, telegraphs, fog
-        Homestead/      Deepforge.Client.Homestead.asmdef  – buildings, production, crew screens
-        Economy/        Deepforge.Client.Economy.asmdef    – assay, smelt, merge, craft, enhance UI
-        Social/         Deepforge.Client.Social.asmdef     – friends, guild, chat, leaderboards, draw
-        Store/          Deepforge.Client.Store.asmdef      – IStoreAdapter, catalog, purchase flow
-        Platform/       Deepforge.Client.Platform.asmdef   – Android plugins: PGS, LINE, Integrity, haptics, push
-        UI/             Deepforge.Client.UI.asmdef         – shared widgets, navigation, localization helpers
-      Art/  Audio/  Prefabs/  Scenes/  Localization/  AddressableAssets/
-    Tests/
-      EditMode/  PlayMode/
-  Packages/manifest.json   – includes "com.deepforge.sim": "file:../../shared/Deepforge.Sim"
+  Assets/_Project/
+    Scripts/
+      App/        Deepforge.Client.App.asmdef        – composition root, BootController, scene flow
+      Delve/      Deepforge.Client.Delve.asmdef      – DelveController, BoardView, input, overlays, HUD
+      Homestead/  Deepforge.Client.Homestead.asmdef  – buildings, production, crew screens
+      Economy/    Deepforge.Client.Economy.asmdef    – assay, smelt, merge, craft, enhance UI
+      Social/     Deepforge.Client.Social.asmdef     – friends, guild, chat, leaderboards, draw
+      Store/      Deepforge.Client.Store.asmdef      – store screens + PlayBillingStoreAdapter
+      Platform/   Deepforge.Client.Platform.asmdef   – UnityWebRequestTransport, Keystore, haptics, push, sign-in
+      UI/         Deepforge.Client.UI.asmdef         – widgets, ScreenRouter, localization helpers
+    Art/ Audio/ Prefabs/ Scenes/ Localization/ AddressableAssets/
+  Assets/Tests/  EditMode/  PlayMode/
+  Packages/manifest.json
+    "com.deepforge.sim":         "file:../../shared/Deepforge.Sim"
+    "com.deepforge.contracts":   "file:../../shared/Deepforge.Contracts"
+    "com.deepforge.client.core": "file:../../shared/Deepforge.Client.Core"
 ```
 
 **Assembly rules:**
-- `Delve` references `Deepforge.Sim` but no UI assembly.
-- No feature assembly references another feature assembly; they communicate through `Core` events.
-- `Deepforge.Sim` must never reference `UnityEngine`. The asmdef sets `"noEngineReferences": true`.
+- `Deepforge.Sim`, `Deepforge.Contracts` and `Deepforge.Client.Core` set `"noEngineReferences": true` in their asmdefs and target .NET Standard 2.1 / C# 9 in their csproj.
+- Unity feature assemblies reference the core but never each other. They communicate through the `SnapshotStore` and core events.
+- Only `Platform` touches Android plugins.
 
-## 12.3 Packages
+## 12.4 Packages
 
 | Package | Purpose | Notes |
 |---|---|---|
@@ -48,203 +74,99 @@ client/
 | Localization (`com.unity.localization`) | String tables, smart strings | zh-TW, en |
 | TextMeshPro (part of uGUI in Unity 6) | Text, CJK SDF fonts | Noto Sans TC (SIL OFL) |
 | Input System | Touch input | |
-| In-App Purchasing (Unity IAP) or Google Play Billing via a thin plugin | Billing | Behind `IStoreAdapter` ([§12.8](#128-store-billing)) |
-| Newtonsoft JSON (`com.unity.nuget.newtonsoft-json`) | DTO serialization | Same attributes as the server contracts; add `link.xml` to keep contracts under IL2CPP stripping |
-| UniTask (Cysharp) | Allocation-free async/await | |
-| VContainer | Dependency injection | |
-| Google Play Games plugin (v2) | Sign-in | `serverAuthCode` flow |
-| LINE SDK for Unity | Sign-in | |
+| Google Play Billing (thin Java plugin) or Unity IAP | Billing | Behind `IStoreAdapter` ([§12.8](#128-store-billing)) |
+| Newtonsoft JSON (`com.unity.nuget.newtonsoft-json`, 13.0.x) | DTO serialization | Same library the client core is tested with. IL2CPP: `link.xml` for Contracts plus AOT hints for generic envelopes over value types ([21 §21.8](21-unity-client-detailed-design.md#218-networking-in-unity)) |
+| VContainer | Dependency injection | Composition root only |
+| UniTask (Cysharp), optional | Allocation-free awaits in the Unity layer | The client core uses `Task` (single-threaded contract); Unity 6 `Awaitable` is an alternative |
+| Google Play Games plugin (v2), LINE SDK for Unity | Sign-in | `serverAuthCode` / ID token flows |
 | Firebase (Crashlytics, Cloud Messaging) | Crashes, push | No Firebase Analytics as source of truth (ADR-019) |
 | Google Play Integrity, In-App Review, In-App Update | Platform | |
 
 Pin all versions in `Packages/manifest.json`. Upgrades go through a PR that runs the device smoke test.
 
-## 12.4 Layers and data flow
+## 12.5 Data flow
 
 ```
- View (MonoBehaviour, UGUI)  ──user intent──▶  Controller / UseCase  ──command──▶  ApiClient
-        ▲                                             │                               │
-        │ binds to (read-only)                        │ optimistic UI (optional)      ▼
- SnapshotStore (immutable records per slice) ◀───── apply response / invalidate ◀── Server
+ View ──intent──▶ Controller ──command──▶ ApiClient ──IHttpTransport──▶ Server
+   ▲                                          │
+   │ subscribes (read-only)                   ▼
+ SnapshotStore ◀──── apply response slices (only if version ≥ current) / invalidate
 ```
 
-- **SnapshotStore** holds immutable records per slice: `Wallet`, `Inventory`, `Buildings`, `Production`, `Crew`, `Sites`, `Objectives`, `Guild` and so on. Each slice has a version. Views subscribe to the slices they need.
-- Every command response returns the slices it changed, and the store replaces them. A `state.invalidate` WebSocket message, or a `409 E_CONFLICT_VERSION`, triggers a re-bootstrap of the affected slices.
-- **Timers** are computed from `serverTime` via `ServerClock`:
-  - `ServerClock` records `offset = serverTime − Time.realtimeSinceStartupAsDouble` on every response;
-  - it smooths the offset with a median of the last 5 samples;
-  - device wall-clock time is never used.
+- **SnapshotStore:** immutable records per slice, versioned by the server's `stateVersion`. A slow response can never overwrite newer state. `state.invalidate` (WebSocket) or `409 E_CONFLICT_VERSION` triggers a refetch of the affected slices.
+- **ServerClock:** offset = serverTime − monotonic time, using the median of the last 5 samples. Every gameplay timer uses it; device wall-clock time is never used (FR-BOOT-005).
 
-## 12.5 Scenes and boot flow
+## 12.6 Scenes and boot
 
 | Scene | Loaded | Contains |
 |---|---|---|
-| `Boot` | First | Splash, root LifetimeScope, crash reporting, config fetch |
+| `Boot` | First | Splash, root LifetimeScope, crash reporting |
 | `Title` | Additive | Login and link, realm select, maintenance and update gates |
-| `Homestead` | Main | Homestead world, HUD, navigation; most screens are prefabs loaded through Addressables |
-| `Delve` | Additive over a black transition | Grid, delve HUD; unloaded on exit |
+| `Homestead` | Main | Homestead world, HUD, navigation; screens are Addressable prefabs |
+| `Delve` | Additive over a fade | Board, delve HUD; unloaded on exit |
 
-**Boot sequence:**
-1. Initialize Crashlytics.
-2. Restore tokens from encrypted storage, or `POST /auth/guest`.
-3. Call `GET /bootstrap`. Check the minimum client version, then check the content hash.
-4. If the content hash differs, download the bundle from the CDN, verify SHA-256, and swap atomically. Keep the previous bundle on failure.
-5. If there is an `activeRun` or a locally persisted run log, go to the **resume flow** ([§12.7](#127-delve-runtime)).
-6. Enter the Homestead.
+The boot sequence is decided by the pure `BootPlanner` and executed by `BootController`:
 
-The budget for this whole sequence is ≤ 8 s (NFR-PERF-003).
+**Maintenance? → force update? → suggest update → download content → reconcile purchases → resume local runs → resolve a run open on another device → Homestead**
 
-## 12.6 Networking
+State machine and error handling are in [21 §21.3](21-unity-client-detailed-design.md#213-application-flow). Budget: ≤ 8 s (NFR-PERF-003).
 
-```csharp
-public sealed class ApiClient
-{
-    private readonly HttpClient _http;          // one instance; HTTP/2; BaseAddress from config
-    private readonly IAuthSession _auth;
-    private readonly ServerClock _clock;
-    private static readonly TimeSpan[] Backoff = { TimeSpan.FromMilliseconds(300), TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(3) };
+## 12.7 Networking
 
-    public async UniTask<T> SendAsync<T>(HttpMethod method, string path, object body = null,
-                                          Guid? idempotencyKey = null, CancellationToken ct = default)
-    {
-        // A command keeps ONE key across all retries; this is what makes retries safe.
-        var key = method == HttpMethod.Get ? (Guid?)null : idempotencyKey ?? UuidV7.New();
-        for (int attempt = 0; ; attempt++)
-        {
-            using var req = new HttpRequestMessage(method, path);
-            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await _auth.GetAccessTokenAsync(ct));
-            req.Headers.Add("X-Client-Version", AppVersion.Full);
-            req.Headers.Add("X-Content-Version", ContentCache.LiveVersion);
-            if (key.HasValue) req.Headers.Add("Idempotency-Key", key.Value.ToString());
-            if (body != null) req.Content = new StringContent(Json.Serialize(body), Encoding.UTF8, "application/json");
-
-            HttpResponseMessage res;
-            try { res = await _http.SendAsync(req, ct); }
-            catch (HttpRequestException) when (attempt < Backoff.Length) { await UniTask.Delay(Backoff[attempt], cancellationToken: ct); continue; }
-
-            var text = await res.Content.ReadAsStringAsync();
-            if (res.IsSuccessStatusCode)
-            {
-                var env = Json.Deserialize<Envelope<T>>(text);
-                _clock.Observe(env.ServerTime);
-                return env.Data;
-            }
-            var problem = Json.Deserialize<Problem>(text);
-            switch (problem.Code)
-            {
-                case ErrorCodes.AuthExpired when attempt == 0: await _auth.RefreshAsync(ct); continue;
-                case ErrorCodes.InProgress or ErrorCodes.RateLimited when attempt < Backoff.Length:
-                    await UniTask.Delay(problem.RetryAfterMs ?? (int)Backoff[attempt].TotalMilliseconds, cancellationToken: ct); continue;
-                default:
-                    if ((int)res.StatusCode >= 500 && attempt < Backoff.Length) { await UniTask.Delay(Backoff[attempt], cancellationToken: ct); continue; }
-                    throw new ApiException(problem);   // mapped to localized UI by ErrorPresenter
-            }
-        }
-    }
-}
-```
-
-- **Token storage:** refresh token and guest secret are stored with Android Keystore-backed encryption (EncryptedSharedPreferences through a small Java plugin), never in plain `PlayerPrefs`.
-- **TLS:** system trust store. **No certificate pinning** at launch: it carries operational risk on certificate rotation and gives little against a rooted attacker. Play Integrity plus server authority is the defense.
-
-## 12.7 Delve runtime
-
-```csharp
-public sealed class LocalRun
-{
-    private readonly TurnEngine _engine;
-    private readonly RunLog _log;             // append-only file: persistentDataPath/runs/{runId}.log
-    private int _acceptedByServer;            // prefix length confirmed by the server
-
-    public RunState State => _engine.State;
-    public event Action<TurnDiff> Applied;    // presenters animate diffs; the sim never waits for animation
-
-    public bool TryApply(SimAction a)
-    {
-        var before = Snapshot.Of(_engine.State);          // small struct copy of the visible state
-        if (!_engine.Apply(a)) return false;              // illegal → UI shakes, nothing recorded
-        _log.Append(ActionCodec.Encode(a));               // fsync-lite: flush every action
-        Applied?.Invoke(TurnDiff.Between(before, _engine.State));
-        if (a.Kind == ActionKind.Descend || _log.Count - _acceptedByServer >= 30) CheckpointQueue.Enqueue(this);
-        return true;
-    }
-
-    public CheckpointPayload NextCheckpoint() => new CheckpointPayload(
-        fromAction: _acceptedByServer,
-        actions: Convert.ToBase64String(_log.Slice(_acceptedByServer)),
-        hash: StateHasher.Hash(_engine.State).ToString("x16"));
-
-    public void OnAccepted(int totalAccepted) => _acceptedByServer = totalAccepted;
-}
-```
-
-**Rules:**
-1. **Simulation first, animation second.** The simulation state updates in the same frame as the tap. Presenters play an animation queue from `TurnDiff` events. If the player taps faster than animations finish, the queue speeds up (×2) instead of blocking input.
-2. **Intent telegraphs:** after each applied action, clone the state, apply `Wait` on the clone, and diff the monster positions and HP to draw intents ([03 §3.3](03-delve-and-combat-design.md#33-turn-structure)). The clone is pooled to avoid garbage collection.
-3. **Checkpoint queue:** a background UniTask sends checkpoints serially. On network failure it keeps the log and retries with backoff. The delve continues offline. Finish waits until all checkpoints are accepted, or sends the remainder in the finish call.
-4. **Resume:** on boot, if `runs/*.log` exists:
-   1. call `GET /delves/active`;
-   2. rebuild a `TurnEngine` from the run config and replay the local log, checking that the hash matches;
-   3. send the unsent suffix;
-   4. if the server says the run expired, send the log to `/finish` with `outcome = "abandoned"` (FR-DLV-012).
-5. **Desync:** if the server returns `E_REPLAY_MISMATCH`, show "This run couldn't be verified", delete the local log and report a non-fatal Crashlytics event with the run id. This should only happen with a bug or tampering. The alert threshold is in [16](16-analytics-and-kpis.md).
+- `ApiClient` ([reference](appendices/reference/client-core/Deepforge.Client.Core/Net/ApiClient.cs)) implements the [11](11-api-specification.md) conventions:
+  - one `Idempotency-Key` per intent, reused across all retries;
+  - one access-token refresh on `E_AUTH_EXPIRED`;
+  - backoff with ±20% jitter for network errors, 5xx, `E_IN_PROGRESS` and `E_RATE_LIMITED` (honouring `retryAfterMs`);
+  - no retry for business errors, `E_MAINTENANCE` or `E_FEATURE_DISABLED`;
+  - a global error event for maintenance and update screens.
+- **Transport:** `IHttpTransport`. On device, `UnityWebRequestTransport` uses the platform network stack, system proxy and certificate store. Tests and tools use `HttpClientTransport`.
+- **Token storage:** the refresh token and guest secret use Android Keystore-backed encryption (EncryptedSharedPreferences via a small plugin), never plain `PlayerPrefs`.
+- **TLS:** the system trust store. **No certificate pinning** at launch: it carries rotation risk and gives little against a rooted attacker. Server authority plus Play Integrity is the defense.
 
 ## 12.8 Store billing
 
-```csharp
-public interface IStoreAdapter
-{
-    UniTask InitializeAsync(IReadOnlyList<string> productIds);
-    UniTask<IReadOnlyList<LocalizedPrice>> GetPricesAsync();
-    UniTask<PurchaseOutcome> PurchaseAsync(string productId, string obfuscatedAccountId);
-    UniTask<IReadOnlyList<PendingPurchase>> QueryUnfinishedAsync();   // called on every bootstrap
-}
-```
+`IStoreAdapter` ([reference](appendices/reference/client-core/Deepforge.Client.Core/Store/PurchaseFlow.cs)) has two methods: `PurchaseAsync(productId, obfuscatedAccountId)` and `QueryUnfinishedAsync()`. `PurchaseFlow` does the rest:
 
-**Purchase flow:**
 1. `GET /store/catalog` returns the limits and `obfuscatedAccountId`. **Limits are checked before** the Google Play sheet opens (FR-STO-008/010).
-2. `PurchaseAsync` launches the billing flow with `setObfuscatedAccountId(...)`.
-3. On success, the client sends `POST /purchases/google`. It **never grants locally**.
-4. The **server** consumes or acknowledges the purchase (FR-STO-005). The client must not consume, otherwise a crash between consume and verify would lose the purchase.
-5. `QueryUnfinishedAsync` runs on every bootstrap and resubmits tokens (FR-STO-006).
-6. Pending purchases (`PENDING` state, e.g. convenience-store payment, common in Taiwan) show "Payment pending". RTDN later completes them.
+2. Purchase → `POST /purchases/google`, with an **idempotency key derived from the purchase token**, so resubmissions after a crash dedupe.
+3. The **server** consumes or acknowledges the purchase (FR-STO-005). The client never consumes, because a crash between consume and verify would lose the purchase.
+4. `ReconcileAsync` runs on every boot and resubmits unfinished purchases (FR-STO-006). Tested: grant exactly once after an app death, and repeated reconciles create no new grants.
+5. Pending payments (e.g. convenience-store payment, common in Taiwan) show "Payment pending", and RTDN completes them.
 
-The Android implementation uses a recent Google Play Billing Library, as Play requires (Play deprecates old versions on a yearly schedule; check at M4). An iOS adapter is future work behind the same interface.
+The Android adapter uses a recent Google Play Billing Library, as Play requires (check the version at M4). An iOS adapter is future work behind the same interface.
 
-## 12.9 Content and assets
+## 12.9 Delve runtime (summary)
 
-- **Content bundle:**
-  - one JSON (brotli-compressed) per content version, about 200–600 KB;
-  - parsed into immutable lookup tables (`ContentDb`) at load;
-  - the Sim's `SiteDef` and related definitions are built from it, so the client and server use identical numbers.
-- **Addressables groups:**
-  - `core` (install-time pack, ≤ 150 MB total base download);
-  - `era1`, `era2` (on-demand packs fetched when the realm unlocks the era);
-  - `cosmetics_sXX` (per season, fast-follow).
-- **Sprites:** sprite atlases per screen. The delve tileset is one 2048² atlas per site (ASTC 6×6).
-- **CJK fonts:** Noto Sans TC (SIL OFL 1.1).
-  - A static SDF atlas holds about 4,000 common Traditional Chinese characters plus Latin, for zero-hitch UI.
-  - A dynamic fallback atlas covers player names and chat.
-  - Bold uses a separate font asset (not a faux-bold shader), for legibility at small sizes.
+The details are in [21 §21.6](21-unity-client-detailed-design.md#216-delve-client).
+
+| Concern | Design | Reference |
+|---|---|---|
+| Local rules | `LocalRun` wraps `TurnEngine`; each legal action is appended to disk (flushed to the OS) and produces a `TurnDiff` | `LocalRun.cs`, `RunLogStore.cs` |
+| Animation | `PresentationScheduler` turns diffs into timed steps. Input is never blocked: 2+ queued turns play at 2×, 4+ at 4× | `PresentationScheduler.cs` |
+| Tactical aids | Exact previews on a cloned engine: monster intents, danger per tap direction, lethal warning, taps-to-break | `Previews.cs` |
+| Tap-to-travel | BFS path over open tiles; walks one legal turn at a time; stops before any step that would cost HP | `Travel.cs` |
+| Sync | Single-flight checkpoints after each Descend, at 30+ unsent actions, and on app pause; desync → the run ends with a message | `DelveSyncService.cs` |
+| Resume | On boot: rebuild from the log, compare with `/delves/active`, continue, late-finish if expired, or accept the server result after the grace period | `DelveSyncService.ResumeAsync` |
 
 ## 12.10 Performance budgets and device tiers
 
 | Tier | Reference devices (examples, Taiwan market) | RAM | Target |
 |---|---|---|---|
-| Low | Samsung Galaxy A05s / A15-class, Redmi 13C-class | 3–4 GB | 30 fps locked, reduced particles, 1× post-processing off |
+| Low | Samsung Galaxy A05s / A15-class, Redmi 13C-class | 3–4 GB | 30 fps locked, reduced particles, post-processing off |
 | Mid (reference) | Galaxy A35 / A55-class, Redmi Note 13-class, OPPO Reno-class | 6–8 GB | 60 fps |
 | High | Pixel 8-class, Galaxy S2x-class, ASUS Zenfone-class | 8+ GB | 60 fps, full effects |
 
 | Budget | Value |
 |---|---|
 | Frame time | p95 ≤ 16.7 ms (mid), ≤ 33 ms (low) |
-| Main-thread garbage in the delve loop | **0 B per frame** steady state (pooled diffs, no LINQ, no boxing) |
+| Main-thread garbage in the delve loop | 0 B per frame steady state; per-tap allocations (diff, previews) only on taps |
+| Client-core work per tap | Measured 13.7 µs on desktop x64 (apply + disk append + diff + danger + intents). Device budget: ≤ 1 ms on the low tier (to verify in M1) |
 | Draw calls (delve) | ≤ 80 |
 | Texture memory | ≤ 250 MB |
 | Resident memory | ≤ 700 MB on 3 GB devices |
 | Cold start → Homestead | ≤ 8 s |
 | Battery | ≤ 6% per 30-minute session (mid) |
-| Thermal | Adaptive: if Android thermal status ≥ moderate, drop to 30 fps and halve particles |
+| Thermal | If Android thermal status ≥ moderate, drop to 30 fps and halve particles |
 
 The game detects the tier at first launch from RAM, GPU family and a 3-second benchmark scene. Players can override it in Settings.
 
@@ -256,7 +178,7 @@ The game detects the tier at first launch from RAM, GPU family and a 3-second be
 | minSdk / targetSdk | 26 / the level Google Play requires at submission |
 | 16 KB page size | Required for apps targeting Android 15+. Use a Unity 6 patch with 16 KB support and verify native plugins (Firebase, LINE, PGS) are 16 KB-aligned |
 | Format | Android App Bundle (AAB) with Play Asset Delivery packs |
-| Code stripping | Managed stripping *Medium* + `link.xml` (Contracts, Newtonsoft converters); R8 keep rules from each plugin |
+| Code stripping | Managed stripping *Medium* + `link.xml` (Contracts, client core DTOs, Newtonsoft converters); R8 keep rules from each plugin |
 | Signing | Play App Signing; the upload key lives in CI secrets only |
 | Versioning | `versionName = MAJOR.MINOR.PATCH`, `versionCode = MAJOR×10000 + MINOR×100 + PATCH`, monotonically increasing |
 | Frame rate | `Application.targetFrameRate = 60` (tier-dependent); VSync off |
@@ -266,44 +188,44 @@ The game detects the tier at first launch from RAM, GPU family and a 3-second be
 
 - Unity Localization string tables: `UI`, `Items`, `Story`, `Errors`, `Mail`. Keys are `snake.dotted` (`assay.button.assay_all`).
 - **No string concatenation.** Use Smart Strings with named arguments: `"{player} 在 {site} 發現了 {item}！"`.
-- Number formatting: zh-TW large numbers use 萬/億 units (12,400 → `1.24萬`). Implement as `NumberFormatter.Compact(long, locale)`.
+- Number formatting: `NumberFormatter.Compact` (tested). zh-TW uses 萬/億 and **truncates, never rounds up**: 12,999 → `1.29萬`. Durations are `2時15分`.
 - Dates: `yyyy/MM/dd HH:mm` in realm time, labelled with the timezone.
-- Pseudo-localization build flag: expands strings by 30% and wraps them with brackets. CI screenshot tests run with it.
-- Server mail and news carry a **template id + params**. The client renders them from tables, so localized text is never stored in the database.
+- Pseudo-localization build flag: +30% expansion and brackets. CI screenshot tests run with it.
+- Server mail and news carry a **template id + params**. Localized text is never stored in the database.
 
 ## 12.13 UI implementation
 
-- **UGUI + TextMeshPro** for runtime UI: mature, animation-friendly, and well understood on mobile. UI Toolkit is used only for editor tools.
-- **Navigation:** a stack-based `ScreenRouter`. The Android back button closes the top panel. Bottom navigation: Homestead · Delve · Forge · Guild · More.
-- **Safe area:** the root canvas applies `Screen.safeArea`, and notch and gesture-bar devices are tested.
-- **Panels:** prefabs loaded through Addressables on first open and pooled afterwards. List views are virtualized (inventory, leaderboards, mail).
+- **UGUI + TextMeshPro** for runtime UI. UI Toolkit is used only for editor tools.
+- **Navigation:** a stack-based `ScreenRouter`. Android back closes the top panel. Bottom navigation: Homestead · Delve · Forge · Guild · More.
+- **Safe area:** the root canvas applies `Screen.safeArea`; notch and gesture-bar devices are tested.
+- **Panels:** Addressable prefabs, pooled after the first open. Lists are virtualized (inventory, leaderboards, mail).
 
 ## 12.14 Audio and haptics
 
-- Audio mixer groups: Music, SFX, UI and Ambient, each with a user slider.
-- Delve SFX are pooled, with 4 concurrent voices for tile breaks.
-- Haptics go through an Android plugin calling `VibrationEffect.createPredefined(EFFECT_TICK / EFFECT_CLICK)` on API 29+, with an amplitude fallback on older versions. There is a setting to turn haptics off.
+- Mixer groups: Music, SFX, UI and Ambient, each with a slider. Delve SFX are pooled (4 voices for tile breaks).
+- Haptics: `VibrationEffect.createPredefined(EFFECT_TICK / EFFECT_CLICK)` on API 29+, amplitude fallback below; a setting turns them off. Event mapping in [21 §21.13](21-unity-client-detailed-design.md#2113-audio-and-haptics-map).
 
 ## 12.15 Telemetry and crash reporting
 
-- Client analytics events (screen views, funnel steps, settings, performance samples every 60 s with fps p50/p95, memory and thermal state) are batched to `POST /v1/telemetry`. The batch is sent at 30 s or 50 events, whichever comes first, and gzip-compressed. The server forwards to Pub/Sub → BigQuery.
-- Crashlytics collects native and managed crashes. Non-fatal events cover replay mismatches, content verification failures and purchase-flow errors.
-- No personal data in telemetry: player id only (pseudonymous), no device identifiers beyond the install id.
+- Client analytics events (screen views, funnel steps, settings, performance samples every 60 s with fps p50/p95, memory and thermal state) are batched to `POST /v1/telemetry` at 30 s or 50 events and gzip-compressed.
+- Crashlytics records crashes. Non-fatal events cover replay mismatches, content verification failures and purchase-flow errors.
+- Pseudonymous player id only; no device identifiers beyond the install id.
 
 ## 12.16 Offline behavior
 
 | State | Allowed | Not allowed |
 |---|---|---|
-| No network at boot | Title screen with retry; if a local run log exists, resume the delve offline | Economy actions |
-| Network lost during a delve | Continue playing (log persists); checkpoints are queued | Finishing waits for connectivity (the result screen shows "syncing") |
-| Network lost in the Homestead | Browse cached snapshots read-only | Writes are disabled with a banner, and retried by the user, not queued automatically (queued economy writes could conflict across devices) |
+| No network at boot | Title screen with retry; a local run can be resumed and played offline | Economy actions |
+| Network lost during a delve | Keep playing (log persists); checkpoints retry | Finishing waits for connectivity (result screen shows "syncing") |
+| Network lost in the Homestead | Browse cached snapshots read-only | Writes are disabled with a banner and retried by the user, never queued (queued economy writes could conflict across devices) |
 
 ## 12.17 Client testing
 
-| Layer | Tooling | What |
-|---|---|---|
-| Sim | .NET test project in CI (same source) | Rules, determinism, golden replays ([13](13-simulation-core.md)) |
-| EditMode | Unity Test Framework | Presenters from fake diffs, number formatting, content parsing, store adapter fakes |
-| PlayMode | Unity Test Framework + a test server (`local` Docker Compose) | Boot → tutorial → first delve → assay → craft, run headless in CI (GameCI) |
-| Device | Firebase Test Lab (Robo + instrumented smoke) on 6–8 Taiwan-relevant devices | Launch, delve, purchase sandbox (license testers), memory and fps capture |
-| Golden replays on device | A PlayMode test replays 50 recorded logs on a real ARM64 device and compares hashes with server values | Catches IL2CPP/ARM determinism issues (FR-DLV-001) |
+| Layer | Tooling | What | Status |
+|---|---|---|---|
+| Sim | .NET tests (same source) | Rules, determinism, golden replays ([13](13-simulation-core.md)) | Reference suite passes |
+| **Client core** | xUnit with dotnet, plus an in-process fake server enforcing the protocol | ApiClient retries and idempotency; resume after kill; hostile-network convergence; expiry and grace; tamper rejection; stale checkpoints; single-flight; diff reconstruction; exact previews; travel safety; presentation timing; content cache; purchases; boot planning; threading contract | **45/45 pass** ([21 §21.18](21-unity-client-detailed-design.md#2118-verification-results)) |
+| EditMode | Unity Test Framework | Views driven by recorded `PresentationStep` streams; prefab and Addressables validation | M1–M2 |
+| PlayMode | Unity Test Framework + local Docker Compose backend | Boot → tutorial → first delve → assay → craft, headless in CI (GameCI) | M2 |
+| Device | Firebase Test Lab on 6–8 Taiwan-relevant devices | Launch, delve, purchase sandbox, memory and fps capture | M1 onward |
+| Golden replays on device | PlayMode test on ARM64 IL2CPP | Same hashes as the server (FR-DLV-001) | M1 |

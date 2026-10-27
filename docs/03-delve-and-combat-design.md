@@ -92,7 +92,7 @@ No extra state or server work is needed. Reading intent is the core skill.
 | Surface | Allowed on a waystone's stairs; the whole haul is credited | [REF] |
 | Faint (HP 0) | Banked 100% + unbanked 50% (rounded down per ore) | [REF] counts / server credit |
 | Abandon/expire | Treated as Faint at the last submitted action, so quitting is never better than fainting | Server |
-| Run expiry | 2 h after start | Server |
+| Run expiry | 2 h after start; then one late finish is accepted for 24 h ([13 §13.7](13-simulation-core.md#137-replay-protocol)) | Server |
 
 **Haul credit (server, [13 §13.8](13-simulation-core.md#138-loot-and-settlement-server-only)):**
 ```

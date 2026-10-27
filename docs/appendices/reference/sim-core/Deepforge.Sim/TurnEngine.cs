@@ -30,15 +30,29 @@ namespace Deepforge.Sim
 
         public RunState State { get; }
 
-        public TurnEngine(SiteDef site, Loadout loadout, ulong layoutSeed)
+        /// <param name="startFloor">1, or a waystone floor the delver has reached before.</param>
+        public TurnEngine(SiteDef site, Loadout loadout, ulong layoutSeed, int startFloor = 1)
         {
+            if (startFloor < 1 || startFloor > site.MaxFloors) throw new ArgumentOutOfRangeException(nameof(startFloor));
             _site = site;
             _lo = loadout;
             _seed = layoutSeed;
             _combat = new Pcg32(layoutSeed ^ 0x9E3779B97F4A7C15UL, 0xC0FFEE);
             State = new RunState { Hp = loadout.MaxHp, Oil = loadout.Oil };
-            FloorGenerator.Generate(State, site, layoutSeed, 1, RunState.Width / 2);
+            FloorGenerator.Generate(State, site, layoutSeed, startFloor, RunState.Width / 2);
         }
+
+        private TurnEngine(TurnEngine source)
+        {
+            _site = source._site;
+            _lo = source._lo;
+            _seed = source._seed;
+            _combat = source._combat;          // struct copy: the clone continues the same RNG sequence
+            State = source.State.Clone();
+        }
+
+        /// <summary>Exact deep copy for client previews (intent, danger, travel). Never used for authority.</summary>
+        public TurnEngine Clone() => new TurnEngine(this);
 
         public static int Damage(int atk, int multPct, int def)
         {

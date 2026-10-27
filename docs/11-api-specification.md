@@ -29,7 +29,8 @@
 | 404 | `E_NOT_FOUND` | Unknown entity | Refresh snapshot |
 | 409 | `E_CONFLICT_VERSION` | `stateVersion` mismatch (two devices) | Re-bootstrap, retry the intent |
 | 409 | `E_IN_PROGRESS` | Same idempotency key still executing | Back off 500 ms, retry |
-| 409 | `E_RUN_ACTIVE` | A delve is already active | Resume that run |
+| 409 | `E_RUN_ACTIVE` | A delve is already active | Resume that run, or abandon it if this device has no log for it |
+| 409 | `E_RUN_CLOSED` | Run settled, or expired (checkpoints only) | Call `finish` (an expired run accepts one late finish for 24 h), or `GET /delves/{id}` for the result |
 | 409 | `E_BUILDER_BUSY` | Another building is upgrading | Show timer |
 | 409 | `E_PURCHASE_MISMATCH` | Token belongs to another account | Show support message |
 | 409 | `E_CONFLICT` | Uniqueness violation (name, realm) | Show message |
@@ -121,7 +122,7 @@
 | Method | Path | Purpose |
 |---|---|---|
 | POST | `/delves` 🔒 | Start: `{siteId, startFloor, skillLoadout:[…]}` |
-| GET | `/delves/active` 🔒 | Resume info (accepted prefix length, last hash) |
+| GET | `/delves/active` 🔒 | `{config, totalAccepted, lastHash, expired}`, or `data: null` when no run is open |
 | POST | `/delves/{runId}/checkpoints` 🔒 | `{fromAction, actions (base64), hash}` |
 | POST | `/delves/{runId}/finish` 🔒 | `{fromAction, actions, hash, outcome: "surfaced" \| "fainted" \| "abandoned"}` |
 | GET | `/delves/{runId}` 🔒 | Settled result (for retries and history) |

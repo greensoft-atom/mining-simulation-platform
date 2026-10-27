@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- Engine-agnostic client logic. No UnityEngine reference: compiled and tested with dotnet in CI,
+         and compiled by Unity as a local package (asmdef with noEngineReferences: true). -->
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <RootNamespace>Deepforge.Client</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Unity ships Newtonsoft.Json 13.0.x as com.unity.nuget.newtonsoft-json -->
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Deepforge.Contracts/Deepforge.Contracts.csproj" />
+    <ProjectReference Include="../../sim-core/Deepforge.Sim/Deepforge.Sim.csproj" />
+  </ItemGroup>
+</Project>

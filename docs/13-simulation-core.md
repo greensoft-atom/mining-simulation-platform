@@ -152,16 +152,33 @@ A typical 200-action run is 200 bytes, about 268 characters in base64. Checkpoin
 Server state per run: actions[] (accepted prefix), last_hash, status, run config (seed, loadout, site, sim_version)
 
 Checkpoint(fromAction, newActions, clientHash):
-  1. if run.status != active                → 409 / settled result
-  2. if fromAction < accepted                → idempotent: drop the overlap, continue with the remainder
-     if fromAction > accepted                → 422 E_VALIDATION (gap)
-  3. candidate = accepted ++ remainder
-  4. result = ReplayValidator.Replay(site, loadout, seed, candidate)        // full replay: ~57 µs per run
-  5. if !result.Ok                           → mark run rejected; 422 E_REPLAY_MISMATCH; emit security event
+  1. if run settled, or expired (now > expires_at)   → 409 E_RUN_CLOSED (client then calls finish / GET result)
+  2. if fromAction > accepted                → 422 E_VALIDATION (gap)
+  3. overlap = accepted − fromAction
+     the first min(overlap, len) incoming bytes must equal accepted[fromAction..]
+                                             → else: mark run rejected; 422 E_REPLAY_MISMATCH (history altered)
+  4. if overlap ≥ len(newActions)            → stale duplicate (an older checkpoint arrived late):
+                                               200 { accepted: 0, totalAccepted: accepted }  — NO hash check
+  5. candidate = accepted ++ newActions[overlap..]
+  6. result = ReplayValidator.Replay(site, loadout, seed, candidate, startFloor)   // full replay: ~57 µs per run
+  7. if !result.Ok                           → mark run rejected; 422 E_REPLAY_MISMATCH; emit security event
      if hash(result.Final) != clientHash     → same as above
-  6. persist actions = candidate, last_hash = clientHash                    // one UPDATE
-  7. if result.Final.Status != Active        → settle immediately (§13.8)
+  8. persist actions = candidate, last_hash = clientHash                    // one UPDATE
+  9. if result.Final.Status != Active        → settle immediately (§13.8)
+
+Finish(fromAction, newActions, clientHash, outcome):
+  same validation as steps 2–7 (a stale duplicate is replayed as "no new actions"), then settle:
+  Surfaced → surfaced · Fainted → fainted · still Active → abandoned (Faint rules). `outcome` is informational.
+  Accepted while the run is open, including after expiry: an expired run takes ONE late finish for 24 h.
+
+Expiry job (hourly): runs with now > expires_at + 24 h that are still open → settle from the accepted prefix.
 ```
+
+**Rules found by the client-core protocol tests** ([21 §21.18](21-unity-client-detailed-design.md#2118-verification-results)):
+- **Step 4 is essential.** Without it, two checkpoints in flight that arrive out of order (the 35-action one first, then the 30-action one) make the older one's hash disagree with the longer accepted prefix, and an **honest run gets rejected**. A mutation test reproduces exactly this failure under the old rule.
+- **Step 3** keeps step 4 safe: a "stale" checkpoint can't smuggle in altered history.
+- **The client is single-flight:** it never has two checkpoints in flight ([`DelveSyncService`](appendices/reference/client-core/Deepforge.Client.Core/Delve/DelveSyncService.cs)). Step 4 still matters, because a lost response plus a retry can produce the same reordering.
+- **The late-finish grace** means a phone that was killed and offline for hours still gets its unsent tail credited (as abandoned/faint) on the next launch. After 24 h the server's accepted prefix wins.
 
 **Full replay on every checkpoint:** a whole run costs about 57 µs (measured, [§13.10](#1310-verification-results)), so caching engine state in memory would add complexity for no measurable gain. It also keeps API instances stateless.
 

@@ -59,9 +59,9 @@ namespace Deepforge.Sim
 
     public static class ReplayValidator
     {
-        public static ReplayResult Replay(SiteDef site, Loadout loadout, ulong layoutSeed, byte[] actions)
+        public static ReplayResult Replay(SiteDef site, Loadout loadout, ulong layoutSeed, byte[] actions, int startFloor = 1)
         {
-            var engine = new TurnEngine(site, loadout, layoutSeed);
+            var engine = new TurnEngine(site, loadout, layoutSeed, startFloor);
             var result = new ReplayResult();
             for (int i = 0; i < actions.Length; i++)
             {
