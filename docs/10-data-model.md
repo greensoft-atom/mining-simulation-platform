@@ -9,7 +9,8 @@ The authoritative DDL is [`appendices/reference/schema.sql`](appendices/referenc
 6. purchase tokens single-use;
 7. job claiming with `SKIP LOCKED`;
 8. UUIDv7 ordering;
-9. one live content version.
+9. one live content version;
+10. the nightly ledger reconciliation query (§10.4) returns zero rows on consistent data and detects a balance changed outside the ledger.
 
 The ledger write path in [09 §9.7.1](09-technical-architecture.md#971-ledger-the-only-way-to-change-value) has also been executed against that schema: credit, debit and overspend rejection, with ledger sums equal to balances.
 

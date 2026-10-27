@@ -92,7 +92,7 @@ The free weekly selection event (ADR-010). It brings back the "excitement of bei
 | Rule | Value |
 |---|---|
 | Window | Monday 05:00 → Sunday 20:00 realm time; reveal Sunday 21:00 |
-| Tickets | 1 per 3 delves reaching floor 5 or deeper (max 12 per week); 1 per completed daily objective set (max 7); 2 for contributing 10+ floors to the guild Deep Expedition (max 2). **Cap: 20 per week** |
+| Tickets | 1 per 3 delves reaching floor 5 or deeper (max 12 per week); 1 per completed daily objective set (max 7); 2 for the completed weekly objective set; 2 for contributing 10+ floors to the guild Deep Expedition. **Cap: 20 per week** (the sources can sum to 23, so the cap binds for the most active players) |
 | Paid influence | **None.** No ticket is ever purchasable. The Charter and Pass grant no tickets and no ticket multipliers |
 | Eligibility at close | Account age ≥ 7 days; HH ≥ 5; account linked to Google or LINE; not under sanction |
 | Prize tiers per realm | Tier 1: **8 winners**, legendary cosmetic of the week + Hall of Fame + 300 free Aurum. Tier 2: **88 winners**, epic decor + 100 free Aurum. Consolation: everyone with ≥ 5 tickets gets 500 coins + 25 Relic Dust |
@@ -221,7 +221,7 @@ Dates follow the lunar calendar and must be checked every year.
 | Holiday | Approximate timing | Overlay idea | Notes |
 |---|---|---|---|
 | New Year | Jan 1 | login_calendar | |
-| **Lunar New Year (春節)** | Late Jan – Feb | Biggest event: Lantern Lode milestone, red/gold decor, "red envelope" mail (fixed amounts, e.g. 88 Aurum) | Peak spending and free time. **Plan the Taiwan launch about 6–8 weeks before this** (LNY 2028 falls on 26 Jan 2028) |
+| **Lunar New Year (春節)** | Late Jan – Feb | Biggest event: Lantern Lode milestone, red/gold decor, "red envelope" mail (fixed amounts, e.g. 88 Aurum) | Peak spending and free time. **Plan the Taiwan launch about 8–10 weeks before this** (LNY 2028 falls on 26 Jan 2028; plan target mid-November 2027, [20 §20.2](20-project-plan.md#202-roadmap-overview)) |
 | Lantern Festival (元宵) | 15th day of LNY | Riddle objectives (燈謎) using mineral lore | |
 | Qingming (清明) | Early April | Quiet; no loud celebration | Respectful tone |
 | Dragon Boat (端午) | 5th day of 5th lunar month | Deep Rift "river" modifier; zongzi decor | |

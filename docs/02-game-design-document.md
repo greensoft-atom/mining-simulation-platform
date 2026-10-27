@@ -339,7 +339,7 @@ These scenarios serve as acceptance narratives. Each one maps to requirement ids
 
 ## 2.15 Accessibility and comfort
 
-Requirements are in [08 NFR-ACC](08-requirements-specification.md#86-non-functional-requirements).
+Requirements are in [08 NFR-ACC](08-requirements-specification.md#810-non-functional-requirements).
 
 - Every action is playable one-handed in portrait. The tap target minimum is 48 dp.
 - Colorblind-safe rarity: shape plus color; tile ore types differ in texture as well as hue.

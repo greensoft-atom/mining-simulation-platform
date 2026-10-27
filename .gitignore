@@ -1,0 +1,9 @@
+# Build outputs
+bin/
+obj/
+__pycache__/
+*.pyc
+# OS / editor
+.DS_Store
+.vscode/
+.idea/

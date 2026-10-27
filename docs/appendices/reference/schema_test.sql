@@ -119,4 +119,53 @@ INSERT INTO content_version (version, sha256, status) VALUES ('2026.11.01-1', '\
 SELECT pg_temp.expect_error(
   $q$INSERT INTO df.content_version (version, sha256, status) VALUES ('2026.11.02-1', '\x02', 'live')$q$, '23505');
 
+-- 10. Ledger reconciliation (docs/10 §10.4) returns zero rows when balance = checkpoint + later deltas --
+-- The wallet holds 750 coins; the ledger has +250 on 2026-11-02; a checkpoint of 500 at 2026-11-01 explains the rest.
+INSERT INTO ledger_checkpoint (owner_kind, owner_id, asset_kind, asset_id, as_of, balance)
+VALUES ('p', '00000000-0000-7000-8000-0000000000a1', 'currency', 'coins', '2026-11-01T00:00:00+08', 500);
+DO $$ DECLARE drift int; BEGIN
+  SELECT count(*) INTO drift FROM (
+WITH cp AS (            -- latest checkpoint per owner/asset (archive boundary)
+  SELECT DISTINCT ON (owner_id, asset_id) owner_id, asset_id, as_of, balance
+  FROM df.ledger_checkpoint WHERE asset_kind = 'currency'
+  ORDER BY owner_id, asset_id, as_of DESC
+), sums AS (
+  SELECT l.owner_id, l.asset_id, sum(l.delta) AS delta
+  FROM df.ledger_line l
+  LEFT JOIN cp ON cp.owner_id = l.owner_id AND cp.asset_id = l.asset_id
+  WHERE l.asset_kind = 'currency' AND (cp.as_of IS NULL OR l.created_at >= cp.as_of)
+  GROUP BY 1, 2
+)
+SELECT w.player_id, w.currency, w.balance,
+       coalesce(cp.balance, 0) + coalesce(s.delta, 0) AS expected
+FROM df.wallet w
+LEFT JOIN cp   ON cp.owner_id = w.player_id AND cp.asset_id = w.currency
+LEFT JOIN sums s ON s.owner_id = w.player_id AND s.asset_id = w.currency
+WHERE w.balance <> coalesce(cp.balance, 0) + coalesce(s.delta, 0)
+  ) r;
+  IF drift <> 0 THEN RAISE EXCEPTION 'reconciliation reported % drifting rows', drift; END IF;
+  -- and it must detect drift: corrupt the balance through a path that bypasses the ledger
+  UPDATE df.wallet SET balance = balance + 1 WHERE currency = 'coins';
+  SELECT count(*) INTO drift FROM (
+WITH cp AS (            -- latest checkpoint per owner/asset (archive boundary)
+  SELECT DISTINCT ON (owner_id, asset_id) owner_id, asset_id, as_of, balance
+  FROM df.ledger_checkpoint WHERE asset_kind = 'currency'
+  ORDER BY owner_id, asset_id, as_of DESC
+), sums AS (
+  SELECT l.owner_id, l.asset_id, sum(l.delta) AS delta
+  FROM df.ledger_line l
+  LEFT JOIN cp ON cp.owner_id = l.owner_id AND cp.asset_id = l.asset_id
+  WHERE l.asset_kind = 'currency' AND (cp.as_of IS NULL OR l.created_at >= cp.as_of)
+  GROUP BY 1, 2
+)
+SELECT w.player_id, w.currency, w.balance,
+       coalesce(cp.balance, 0) + coalesce(s.delta, 0) AS expected
+FROM df.wallet w
+LEFT JOIN cp   ON cp.owner_id = w.player_id AND cp.asset_id = w.currency
+LEFT JOIN sums s ON s.owner_id = w.player_id AND s.asset_id = w.currency
+WHERE w.balance <> coalesce(cp.balance, 0) + coalesce(s.delta, 0)
+  ) r;
+  IF drift <> 1 THEN RAISE EXCEPTION 'reconciliation failed to detect drift (got %)', drift; END IF;
+END $$;
+
 \echo 'schema_test: all invariants hold'
