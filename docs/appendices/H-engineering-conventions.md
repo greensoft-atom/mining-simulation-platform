@@ -59,7 +59,8 @@ T:System.Collections.Generic.HashSet`1; Iteration order is not guaranteed
 | Folders | `Assets/_Project/...` for our content; third-party plugins stay in their own folders |
 | Assemblies | One asmdef per feature; no cyclic references; tests in separate asmdefs |
 | MonoBehaviours | Thin: views only. Logic lives in plain C# classes injected via VContainer |
-| Async | UniTask; cancel on `OnDestroy` (`this.GetCancellationTokenOnDestroy()`) |
+| Async | Client core (`Deepforge.Client.Core`): `Task`, single-threaded contract, **never `ConfigureAwait(false)`** (enforced by `ThreadingContractTests`). Unity layer: `await` core tasks or `.Forget()` with logging; never `.Result`/`.Wait()`; cancel with `destroyCancellationToken`; UniTask/Awaitable optional |
+| Logic placement | Anything testable without the Editor (rules, protocol, previews, formatting, flows) goes in the client core with tests; MonoBehaviours only render, take input and call platform APIs |
 | Update loops | No per-frame allocation in gameplay; profile any `Update` that does work |
 | Assets | Addressables keys = content ids where possible (`icon/ingot.copper`); sprite atlases per screen |
 | Strings | Never hard-code player-facing text; use Localization tables |

@@ -31,6 +31,7 @@ jobs:
         with: { dotnet-version: '10.0.x' }
       - run: dotnet build server/Deepforge.sln -c Release -warnaserror
       - run: dotnet test server/Deepforge.sln -c Release --collect:"XPlat Code Coverage"   # Testcontainers needs Docker (available on ubuntu runners)
+      - run: dotnet test shared/Deepforge.Client.Core.Tests -c Release   # engine-agnostic client core (docs/21 §21.18)
       - run: dotnet run --project tools/Deepforge.ContentCompiler -- validate content/
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }

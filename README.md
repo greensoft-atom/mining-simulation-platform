@@ -1,4 +1,4 @@
-# Deepforge: Mining Kingdoms (working title)
+# Deepforge: Mining Simulation (working title)
 
 An ad-free mining RPG for Android: tactical turn-based delves, an idle homestead, lucky finds with published odds, and asynchronous guild play, built on a server-authoritative backend.
 

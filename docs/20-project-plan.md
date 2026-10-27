@@ -77,7 +77,7 @@ Each milestone ends with a **gate review**: a 1-hour meeting with evidence, run 
 - this documentation reviewed;
 - Proposed ADRs confirmed or changed;
 - monorepo with CI skeleton;
-- Unity project with `Deepforge.Sim` as a local package (the reference code moved from `docs/appendices/reference/sim-core` to `/shared`);
+- Unity project with `Deepforge.Sim`, `Deepforge.Contracts` and `Deepforge.Client.Core` as local packages (the reference code moved from `docs/appendices/reference/sim-core` and `client-core` to `/shared`; [21 §21.19](21-unity-client-detailed-design.md#2119-implementation-plan-client));
 - Terraform for dev;
 - art-direction brief and vendor shortlist;
 - `economy_sim.py` moved to `/tools/economy` and wired into CI.

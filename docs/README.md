@@ -22,9 +22,9 @@ It turns the design study in [`/study`](../study/) into decisions. Where the stu
 |---|---|---|
 | **Everyone** (start here) | [01 Product Vision](01-product-vision.md), [00 Decision Log](00-decision-log.md) | [02 GDD](02-game-design-document.md), [20 Project Plan](20-project-plan.md) |
 | Game / economy designer | [02](02-game-design-document.md), [03](03-delve-and-combat-design.md), [04](04-economy-and-progression.md) | [05](05-multiplayer-guilds-and-territory.md), [06](06-live-operations-and-events.md), [07](07-monetization-and-business-model.md), [B](appendices/B-content-tables.md), [D](appendices/D-economy-simulation.md) |
-| Client engineer | [12](12-client-architecture.md), [13](13-simulation-core.md), [03](03-delve-and-combat-design.md) | [11](11-api-specification.md), [08](08-requirements-specification.md), [H](appendices/H-engineering-conventions.md) |
+| Client engineer | [12](12-client-architecture.md), [21](21-unity-client-detailed-design.md), [13](13-simulation-core.md), [03](03-delve-and-combat-design.md) | [11](11-api-specification.md), [08](08-requirements-specification.md), [H](appendices/H-engineering-conventions.md) |
 | Backend engineer | [09](09-technical-architecture.md), [10](10-data-model.md), [11](11-api-specification.md), [13](13-simulation-core.md) | [14](14-security-and-anti-cheat.md), [18](18-devops-and-operations.md), [H](appendices/H-engineering-conventions.md) |
-| Full-stack / tools / tech art | [15](15-content-pipeline-and-admin-tools.md), [16](16-analytics-and-kpis.md), [12](12-client-architecture.md) | [17](17-quality-assurance-and-testing.md), [18](18-devops-and-operations.md) |
+| Full-stack / tools / tech art | [15](15-content-pipeline-and-admin-tools.md), [16](16-analytics-and-kpis.md), [21](21-unity-client-detailed-design.md) | [17](17-quality-assurance-and-testing.md), [18](18-devops-and-operations.md) |
 | Business / legal | [07](07-monetization-and-business-model.md), [19](19-legal-compliance-and-localization.md), [20](20-project-plan.md) | [F](appendices/F-risk-register.md), [G](appendices/G-open-questions.md) |
 
 ## Document map
@@ -43,7 +43,7 @@ It turns the design study in [`/study`](../study/) into decisions. Where the stu
 | 09 | [Technical Architecture](09-technical-architecture.md) | System context, stack, modules, flows, patterns, capacity, failure modes | P2 |
 | 10 | [Data Model](10-data-model.md) | Schema guide, ledger, reconciliation, Redis keys, retention, migrations | P2 |
 | 11 | [API Specification](11-api-specification.md) | Conventions, errors, endpoints with examples, WebSocket, admin API | P2 |
-| 12 | [Client Architecture](12-client-architecture.md) | Unity structure, networking, delve runtime, billing, assets, budgets | P1 |
+| 12 | [Client Architecture](12-client-architecture.md) | Two-layer client (Unity + engine-agnostic core), threading contract, packages, budgets | P1 |
 | 13 | [Simulation Core](13-simulation-core.md) | Determinism rules, RNG, seeds, replay protocol, settlement, versioning | P1 + P2 |
 | 14 | [Security & Anti-Cheat](14-security-and-anti-cheat.md) | Threat model, auth, Integrity, replay, bots/RMT, purchases, privacy | P2 |
 | 15 | [Content Pipeline & Admin Tools](15-content-pipeline-and-admin-tools.md) | Content compiler, validation rules, publishing, admin console, support | P4 |
@@ -52,6 +52,7 @@ It turns the design study in [`/study`](../study/) into decisions. Where the stu
 | 18 | [DevOps & Operations](18-devops-and-operations.md) | CI/CD, Terraform, SLOs, jobs, backup/DR, on-call, incident runbooks | P2 |
 | 19 | [Legal, Compliance & Localization](19-legal-compliance-and-localization.md) | Market rules, Google Play policies, ToS, draw legality, privacy, culture | P3 |
 | 20 | [Project Plan](20-project-plan.md) | Team, milestones and gates, capacity, budget, ways of working | P3 |
+| 21 | [Unity Client Detailed Design](21-unity-client-detailed-design.md) | App flow, screens and wireframes, delve client (input, previews, travel, sync), juice spec, Unity-layer code, asset spec, **tested client core** | P1 + P4 |
 | A | [Glossary](appendices/A-glossary.md) | Game (with zh-TW drafts), business and technical terms | — |
 | B | [Content Tables](appendices/B-content-tables.md) | Items, sites, monsters, gear, **generated** building, XP and enhancement tables | P3 |
 | C | [Formula Reference](appendices/C-formula-reference.md) | Every formula in one place | P3 |
@@ -85,8 +86,9 @@ It turns the design study in [`/study`](../study/) into decisions. Where the stu
 | Ledger write path ([09 §9.7.1](09-technical-architecture.md#971-ledger-the-only-way-to-change-value)) | Compiled with Npgsql + Dapper; credit, debit and overspend rejection against PostgreSQL 18 | **Pass**; ledger sum = balance | — |
 | Draw algorithm ([06 §6.5](06-live-operations-and-events.md#65-the-motherlode-draw)) | C# and Python implementations on a 3,000-ticket fixture | **Identical** commit and winners | — |
 | Settlement and seeds ([13 §13.5, §13.8](13-simulation-core.md#138-loot-and-settlement-server-only)) | Compiled against the reference simulation; deterministic re-settlement | **Pass** | — |
+| Client core ([reference code](appendices/reference/client-core/), [21 §21.18](21-unity-client-detailed-design.md#2118-verification-results)) | 45 tests: API retries and idempotency, resume after kill, convergence under 20/20/10% network faults, expiry and grace, tamper rejection, single-flight checkpoints, exact previews, travel safety, purchases, threading contract; 2 mutation checks | **45/45 pass**; per-tap core work 13.7 µs. Found and fixed 2 protocol bugs | `dotnet test docs/appendices/reference/client-core/Deepforge.Client.Core.Tests -c Release` |
 
-**Not yet verified:** cross-platform determinism on ARM64 IL2CPP (M1 device test), every client-side design (Unity), and all market and legal items marked ⚖ in [19](19-legal-compliance-and-localization.md).
+**Not yet verified:** the Unity-layer code (MonoBehaviours, UnityWebRequest transport, VContainer composition: specified in [21](21-unity-client-detailed-design.md) but not compiled, because no Unity Editor was available), IL2CPP/AOT and on-device performance, cross-platform determinism on ARM64 IL2CPP (M1 device test), and all market and legal items marked ⚖ in [19](19-legal-compliance-and-localization.md).
 
 ## Conventions used in these docs
 
@@ -102,3 +104,4 @@ It turns the design study in [`/study`](../study/) into decisions. Where the stu
 | Version | Date | Change |
 |---|---|---|
 | 1.0 | 2026-10-27 | First complete documentation set produced from the design study; study moved to `/study` |
+| 1.1 | 2026-10-27 | Added [21 Unity Client Detailed Design](21-unity-client-detailed-design.md) and the tested client-core reference (45 tests). Fixed two protocol issues it found: stale checkpoints could reject honest runs ([13 §13.7](13-simulation-core.md#137-replay-protocol), FR-DLV-015), and an unsafe `ConfigureAwait(false)` under Unity. Specified run-expiry late finish (FR-DLV-012, `E_RUN_CLOSED`). Rewrote [12](12-client-architecture.md) around the two-layer client |
