@@ -20,7 +20,7 @@ It turns the design study in [`/study`](../study/) into decisions. Where the stu
 
 | If you are… | Read first | Then |
 |---|---|---|
-| **Everyone** (start here) | [01 Product Vision](01-product-vision.md), [00 Decision Log](00-decision-log.md) | [02 GDD](02-game-design-document.md), [20 Project Plan](20-project-plan.md) |
+| **Everyone** (start here) | [22 The Player's Story](22-player-experience-narrative.md), [01 Product Vision](01-product-vision.md), [00 Decision Log](00-decision-log.md) | [02 GDD](02-game-design-document.md), [20 Project Plan](20-project-plan.md) |
 | Game / economy designer | [02](02-game-design-document.md), [03](03-delve-and-combat-design.md), [04](04-economy-and-progression.md) | [05](05-multiplayer-guilds-and-territory.md), [06](06-live-operations-and-events.md), [07](07-monetization-and-business-model.md), [B](appendices/B-content-tables.md), [D](appendices/D-economy-simulation.md) |
 | Client engineer | [12](12-client-architecture.md), [21](21-unity-client-detailed-design.md), [13](13-simulation-core.md), [03](03-delve-and-combat-design.md) | [11](11-api-specification.md), [08](08-requirements-specification.md), [H](appendices/H-engineering-conventions.md) |
 | Backend engineer | [09](09-technical-architecture.md), [10](10-data-model.md), [11](11-api-specification.md), [13](13-simulation-core.md) | [14](14-security-and-anti-cheat.md), [18](18-devops-and-operations.md), [H](appendices/H-engineering-conventions.md) |
@@ -53,6 +53,7 @@ It turns the design study in [`/study`](../study/) into decisions. Where the stu
 | 19 | [Legal, Compliance & Localization](19-legal-compliance-and-localization.md) | Market rules, Google Play policies, ToS, draw legality, privacy, culture | P3 |
 | 20 | [Project Plan](20-project-plan.md) | Team, milestones and gates, capacity, budget, ways of working | P3 |
 | 21 | [Unity Client Detailed Design](21-unity-client-detailed-design.md) | App flow, screens and wireframes, delve client (input, previews, travel, sync), juice spec, Unity-layer code, asset spec, **tested client core** | P1 + P4 |
+| 22 | [The Player's Story](22-player-experience-narrative.md) | Readable narrative of the whole game as a player lives it: vision, a session, the first 15 minutes to day 90, personas, scenarios, user flows, player thoughts | P3 |
 | A | [Glossary](appendices/A-glossary.md) | Game (with zh-TW drafts), business and technical terms | — |
 | B | [Content Tables](appendices/B-content-tables.md) | Items, sites, monsters, gear, **generated** building, XP and enhancement tables | P3 |
 | C | [Formula Reference](appendices/C-formula-reference.md) | Every formula in one place | P3 |
@@ -105,3 +106,4 @@ It turns the design study in [`/study`](../study/) into decisions. Where the stu
 |---|---|---|
 | 1.0 | 2026-10-27 | First complete documentation set produced from the design study; study moved to `/study` |
 | 1.1 | 2026-10-27 | Added [21 Unity Client Detailed Design](21-unity-client-detailed-design.md) and the tested client-core reference (45 tests). Fixed two protocol issues it found: stale checkpoints could reject honest runs ([13 §13.7](13-simulation-core.md#137-replay-protocol), FR-DLV-015), and an unsafe `ConfigureAwait(false)` under Unity. Specified run-expiry late finish (FR-DLV-012, `E_RUN_CLOSED`). Rewrote [12](12-client-architecture.md) around the two-layer client |
+| 1.2 | 2026-10-27 | Added [22 The Player's Story](22-player-experience-narrative.md), a narrative overview for all readers. Fixed the Tunnel Wyrm and Cinder Toad relic sources in [02 §2.9](02-game-design-document.md#29-collections-and-the-trophy-hall) to match [B §B.10](appendices/B-content-tables.md#b10-relics-and-sets-launch), and the casual geode frequency in [04 §4.5](04-economy-and-progression.md#45-assay) |

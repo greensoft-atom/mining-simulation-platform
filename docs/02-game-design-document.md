@@ -204,8 +204,8 @@ Mining level formula: `floor(sqrt(chunks_mined / 10))`, so 1,000 chunks gives le
 
 | Set (id) | Relics | Source | Set bonus (permanent) |
 |---|---|---|---|
-| Settler's Keepsakes (`set.settlers_keepsakes`) | 6 | Geodes in Copperhollow and Emberseam | +2% chunk yield |
-| Wyrm Hoard (`set.wyrm_hoard`) | 6 | Geodes in Emberseam; Tunnel Wyrm first clear | +1 crew slot (counted in addition to HH slots) |
+| Settler's Keepsakes (`set.settlers_keepsakes`) | 6 | Geodes in Copperhollow and Emberseam; Tunnel Wyrm first clear | +2% chunk yield |
+| Wyrm Hoard (`set.wyrm_hoard`) | 6 | Geodes in Emberseam; Cinder Toad first clear | +1 crew slot (counted in addition to HH slots) |
 | Bronze Works (`set.bronze_works`) | 6 | Geodes in Tinreach; Bronze Sentinel | +5 lamp oil |
 
 **Duplicate protection:**

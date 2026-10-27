@@ -89,7 +89,7 @@ Server implementation: lazy evaluation, `current = min(1000, stored + 50 × hour
 | Pity | Guaranteed geode at 250 chunks without one; the counter persists across sessions (`assay_state`) |
 | Geode table | Gem 70% / Relic 25% / Starstone shard 5% |
 
-**Measured rates** (engaged player): 340 chunks assayed per day → **2.1 geodes per day**, about 0.5 relics per day. A casual player gets 0.7 geodes per day, so a geode lands about every other session, which keeps it special.
+**Measured rates** (engaged player): 340 chunks assayed per day → **2.1 geodes per day**, about 0.5 relics per day. A casual player (3 sessions a day) gets 0.7 geodes per day: one every day or two, or roughly every fourth session, which keeps it special.
 
 ## 4.6 Refining and merging
 
