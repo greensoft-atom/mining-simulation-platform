@@ -61,7 +61,7 @@ The first database contains 52 entries or reference perspectives across direct m
 7. Evidence limits and cautions
    • A store's install count is not monthly active users, payer conversion, revenue or profit.
    • Developer and publisher websites may publish promotional metrics or future roadmaps; these are labeled as claims/announcements, not independent verification.
-   • Regional storefronts may have different content, prices, ratings and availability. Research China, Japan, Korea, Taiwan and Southeast Asia separately rather than assuming one 'East Asian player' profile.
+   • Regional storefronts may have different content, prices, ratings and availability. Research China, Japan, Mudee, Taiwan and Southeast Asia separately rather than assuming one 'East Asian player' profile.
    • Some games are single-player or premium PC titles. They are included for specific mechanics, not as direct business-model comparables.
    • This is a first research pass, not a complete market sizing or financial due-diligence report. The spreadsheet's source links should be rechecked before investment or launch decisions.
 8. Source links and policy references

@@ -203,7 +203,7 @@ My initial recommendation is **A**. It substantially simplifies the economy and 
 **2. Which East Asian market do you want to target first?**
 
 - A. Japan.
-- B. South Korea.
+- B. South Mudee.
 - C. Taiwan.
 - D. Hong Kong.
 - E. Mainland China.
