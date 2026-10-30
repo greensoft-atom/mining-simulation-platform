@@ -17,6 +17,7 @@ import import_reviews
 import play_store
 import reddit
 import web_pages
+import youtube_index
 from common import html_to_text
 
 
@@ -129,6 +130,29 @@ class RedditParser(unittest.TestCase):
     def test_media_urls(self):
         self.assertEqual(reddit.media_urls({"url": "https://i.redd.it/x.png", "domain": "i.redd.it"}), ["https://i.redd.it/x.png"])
         self.assertEqual(reddit.media_urls({"url": "https://example.com/page", "domain": "example.com"}), [])
+
+
+class ArcticAndYoutube(unittest.TestCase):
+    def test_game_mention_filter(self):
+        self.assertTrue(reddit.is_game_mention("anything at all", "GrowStone_Online"))
+        self.assertTrue(reddit.is_game_mention("Anyone still playing Growstone? The pvp is rough", "MobileGaming"))
+        self.assertTrue(reddit.is_game_mention("growstone online by supercat", "Korea"))
+        self.assertFalse(reddit.is_game_mention("Where is the Growstone bench in Silksong?", "Silksong"))
+        self.assertFalse(reddit.is_game_mention("I switched my anthurium to growstones", "Anthurium"))
+        self.assertFalse(reddit.is_game_mention("no mention here", "MMORPG"))
+
+    def test_arctic_tree_is_reddit_shaped(self):
+        # Arctic Shift's /comments/tree returns the same t1/replies structure as Reddit.
+        out, pending = [], []
+        reddit.flatten(THREAD[1]["data"]["children"], out, pending)
+        self.assertEqual(len(out), 2)
+
+    def test_video_id_extraction(self):
+        text = ("see https://www.youtube.com/watch?v=dQw4w9WgXcQ and https://youtu.be/abcdefghijk, "
+                "https://www.youtube.com/watch?feature=share&amp;v=ZZZZZZZZZZZ, https://www.youtube.com/embed/AAAAAAAAAAA, "
+                "https://youtube.com/shorts/BBBBBBBBBBB but not https://www.youtube.com/channel/UCxxxxxxxxxxxx")
+        self.assertEqual(youtube_index.VIDEO_ID.findall(text),
+                         ["dQw4w9WgXcQ", "abcdefghijk", "ZZZZZZZZZZZ", "AAAAAAAAAAA", "BBBBBBBBBBB"])
 
 
 class WebFilter(unittest.TestCase):

@@ -62,7 +62,10 @@ class PoliteSession:
                 time.sleep(delay); delay *= 2
                 continue
             if r.status_code in (429, 500, 502, 503, 504) and attempt < self.max_retries:
-                wait = float(r.headers.get("Retry-After") or delay)
+                # Retry-After is standard; Arctic Shift sends X-RateLimit-Reset (seconds) instead.
+                hinted = r.headers.get("Retry-After") or r.headers.get("X-RateLimit-Reset")
+                # A 429 with no hint means "too fast": back off for real, not for 2 seconds.
+                wait = float(hinted) if hinted else (max(delay, 30.0) if r.status_code == 429 else delay)
                 log(f"  HTTP {r.status_code}; retry in {wait:.0f}s")
                 time.sleep(wait); delay *= 2
                 continue

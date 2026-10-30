@@ -83,7 +83,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("command", choices=["build", "search", "stats"])
     ap.add_argument("query", nargs="?")
-    ap.add_argument("--source", choices=["fandom", "reddit", "web", "play", "review"], help="limit search to one collector")
+    ap.add_argument("--source", choices=["fandom", "reddit", "web", "play", "review", "youtube"], help="limit search to one collector")
     ap.add_argument("--limit", type=int, default=20)
     ap.add_argument("--corpus", type=Path, default=DEFAULT_OUT)
     args = ap.parse_args(argv)
