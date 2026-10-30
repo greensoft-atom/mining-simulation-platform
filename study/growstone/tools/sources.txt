@@ -1,0 +1,16 @@
+# Seed URLs for web_pages.py: public pages about GrowStone Online.
+# One URL per line; lines starting with # are ignored. Add any blog, guide or
+# forum thread you find. Wiki, Reddit, Google Play, Facebook and YouTube are
+# excluded on purpose (dedicated collectors, or the site's terms forbid scraping).
+
+# Reviews and write-ups
+https://mmohuts.com/review/grow-stone-online
+https://mmohuts.com/games/grow-stone-online
+
+# App trackers (rating history, version history, update notes)
+https://www.androidrank.org/application/growstone_online_pixel_mmorpg/net.supercat.stone
+https://chrome-stats.com/d/net.supercat.stone
+https://apptopia.com/google-play/app/net.supercat.stone/about
+
+# Developer
+https://www.supercat.co.kr/supercat-games?lang=en

@@ -7,3 +7,7 @@ __pycache__/
 .DS_Store
 .vscode/
 .idea/
+
+# GrowStone research: third-party app binary and collected corpus stay local
+study/growstone/*.apk
+study/growstone/corpus/
