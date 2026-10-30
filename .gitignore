@@ -11,3 +11,4 @@ __pycache__/
 # GrowStone research: third-party app binary and collected corpus stay local
 study/growstone/*.apk
 study/growstone/corpus/
+study/growstone/tools/scheduled.env

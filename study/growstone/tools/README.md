@@ -13,6 +13,7 @@ Scripts that gather public information about GrowStone Online into a local, sear
 | `media.py` | **Screens and clips:** full-size store screenshots (Play in 15 languages, App Store iPhone and iPad in 16 countries); every Play listing the Wayback Machine archived since 2018, with its screenshots and text; images and clips linked on Reddit (imgur, i.redd.it, v.redd.it); YouTube thumbnails. Builds `media/gallery.html` | Image CDNs with robots.txt checks; Apple's documented iTunes Search API (`/lookup`); Wayback CDX API; 1 request/s, 4 s for pages and APIs | — (whole imgur albums: free `IMGUR_CLIENT_ID`) |
 | `capture.py` | **Your own screenshots and recordings** from a phone or emulator (adb), or imported from the phone's own screenshot and screen-record buttons | Local: `adb exec-out screencap`, `adb shell screenrecord`, or files you copy | Android platform-tools for adb |
 | `corpus_index.py` | Full-text search over everything above | SQLite FTS5, local | — |
+| `scheduled.sh` | Runs the collectors above on a schedule (cron) and logs each run | Local | cron |
 
 Output goes to `study/growstone/corpus/`, which is **gitignored**: it stays on your machine.
 
@@ -40,6 +41,26 @@ python3 corpus_index.py stats
 ```
 
 Every collector is **resumable** and **incremental**. Re-running skips wiki pages whose revision is unchanged, Reddit threads whose comment count is unchanged, and web pages already saved. Use `--limit N` on the wiki and Reddit scripts for a quick trial (`reddit.py --limit 5`). Run the offline tests with `python3 -m unittest test_tools -v`.
+
+### Scheduled runs
+
+`scheduled.sh` keeps the corpus current without you. `./scheduled.sh install` adds three cron jobs (safe to repeat; `uninstall` removes them):
+
+| Set | When (local time) | Runs |
+|---|---|---|
+| daily | 04:17 | `reddit.py --media`, `youtube_index.py --from-corpus`, `media.py linked`, `media.py thumbs` |
+| weekly | Monday 05:23 | `play_store.py`, `media.py store`, `fandom_wiki.py --images`, plus `youtube_index.py --search` if `YOUTUBE_API_KEY` is set |
+| monthly | 3rd, 06:41 | `media.py history`, `web_pages.py --from-corpus --depth 1` |
+
+Each set ends with `corpus_index.py build`. The cadence follows how fast each source changes: Reddit and the archives move daily, store listings and wikis about weekly, and the Wayback Machine captures the Play page about once a month. Because every collector is incremental, a run fetches only what changed, typically a few dozen requests. Runs never overlap (one lock), each step has a time limit, and a failed step doesn't stop the others; a rate-limited archive is simply retried the next day.
+
+`./scheduled.sh status` shows the jobs and the result of each set's latest run; full logs are in `corpus/logs/<date>_<set>.log` (kept 90 days). To add a contact or keys, create `tools/scheduled.env` (gitignored):
+
+```bash
+GS_RESEARCH_UA="growstone-research/0.1 (contact: you@example.com)"
+YOUTUBE_API_KEY=...
+IMGUR_CLIENT_ID=...
+```
 
 ### Keys (optional)
 Nothing above needs a key. Keys add coverage:
