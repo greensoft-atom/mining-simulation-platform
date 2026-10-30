@@ -21,7 +21,7 @@ from pathlib import Path
 
 from common import DEFAULT_OUT, PoliteSession, front_matter, html_to_text, log, read_json, slug, write_json, write_text
 
-KNOWN_WIKIS = ["growstoneonline", "thegrowstoneonline"]
+KNOWN_WIKIS = ["growstoneonline", "thegrowstoneonline", "grow-stone-online-legend-stone"]
 # 0 = articles, 4 = project, 10 = templates (often hold stat tables), 14 = categories
 NAMESPACES = [0, 4, 10, 14]
 

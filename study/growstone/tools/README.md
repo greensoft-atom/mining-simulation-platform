@@ -4,12 +4,14 @@ Scripts that gather public information about GrowStone Online into a local, sear
 
 | Script | Collects | Access method | Needs |
 |---|---|---|---|
-| `fandom_wiki.py` | Both GrowStone Fandom wikis: every page (wikitext, HTML, Markdown, links, categories), optionally all images | Official MediaWiki API, 1 request/s | — |
+| `fandom_wiki.py` | All three GrowStone Fandom wikis (including *Legend Stone*): every page (wikitext, HTML, Markdown, links, categories), optionally all images | Official MediaWiki API, 1 request/s | — |
 | `reddit.py` | Full history of r/GrowStone and r/GrowStone_Online with complete comment threads; posts and comments mentioning the game anywhere on Reddit (filtered for game context); optional post images | **No key:** Arctic Shift (subreddit history, comment trees) + PullPush (site-wide search, fallback), both Pushshift-successor archives, paced and with backoff. **Optional:** Reddit's official Data API (live data) | — (official API: approved `REDDIT_CLIENT_ID`/`SECRET`) |
 | `play_store.py` | The public Google Play listing in 15 languages: rating, downloads, update date, what's new, description, and the ~3 reviews shown per language (with developer replies), dated for history | Public store page only (allowed by Play's robots.txt), 1 request/5 s | — |
 | `import_reviews.py` | Reviews you collect by hand or export from a licensed review-data service (CSV, JSON, or pasted text) | Local files | — |
 | `web_pages.py` | Reviews, blogs, guides and tracker pages from `sources.txt`, plus links discovered in the wiki and Reddit output | Plain HTTP with robots.txt checks, 1 request/3 s per site | — |
 | `youtube_index.py` | An index of GrowStone videos: title, channel, and where each was linked; with a key also date, length, views and keyword search | **No key:** YouTube's official oEmbed endpoint for every video linked from the corpus. **With key:** YouTube Data API v3 search | — (search: `YOUTUBE_API_KEY`) |
+| `media.py` | **Screens and clips:** full-size store screenshots (Play in 15 languages, App Store iPhone and iPad in 16 countries); every Play listing the Wayback Machine archived since 2018, with its screenshots and text; images and clips linked on Reddit (imgur, i.redd.it, v.redd.it); YouTube thumbnails. Builds `media/gallery.html` | Image CDNs with robots.txt checks; Apple's documented iTunes Search API (`/lookup`); Wayback CDX API; 1 request/s, 4 s for pages and APIs | — (whole imgur albums: free `IMGUR_CLIENT_ID`) |
+| `capture.py` | **Your own screenshots and recordings** from a phone or emulator (adb), or imported from the phone's own screenshot and screen-record buttons | Local: `adb exec-out screencap`, `adb shell screenrecord`, or files you copy | Android platform-tools for adb |
 | `corpus_index.py` | Full-text search over everything above | SQLite FTS5, local | — |
 
 Output goes to `study/growstone/corpus/`, which is **gitignored**: it stays on your machine.
@@ -27,6 +29,9 @@ python3 reddit.py --media                       # both subreddits + site-wide me
 python3 youtube_index.py --from-corpus          # videos linked anywhere in the corpus (no key)
 export YOUTUBE_API_KEY=...                      # optional, free and self-service
 python3 youtube_index.py --from-corpus --search # adds keyword search, dates, lengths, views
+python3 media.py all                            # screenshots, archived listings, linked clips, thumbnails, ~10 min
+python3 capture.py session                      # your own captures while you play (adb), then:
+python3 media.py gallery                        # open corpus/media/gallery.html in a browser
 
 python3 corpus_index.py build
 python3 corpus_index.py search '"stone token" OR "돌의 징표"'
@@ -69,9 +74,30 @@ corpus/
   play/<date>_<locale>.{md,json}   html/   <date>_summary.json
   reviews/<source>/<id>.md   reviews.jsonl
   web/pages/<site_path>.{md,html}   index.json        (index.json also records skips and errors)
+  play/history/<date>_<lang>.md                       (archived listings: description and what's new over time)
+  appstore/<date>_<country>.{md,json}
   youtube/videos.{json,md}
+  media/gallery.html                                  (open in a browser: every image and clip below, grouped)
+  media/play/  appstore/  linked/  youtube/            index.json  history.json  linked.json
+  media/own/<date>/<time>_<label>.{png,mp4}  index.jsonl   (capture.py)
   corpus.db                                           (search index)
 ```
+
+## Screens and clips
+
+`media.py` collects what the sources allow, at full size, and `gallery.html` shows it with captions and links back to each source. Same-image groups are merged, so "Google Play · de-DE, en-US, …" means those languages show identical screenshots.
+
+| Source | What you get | Notes |
+|---|---|---|
+| Google Play listing | 6 screenshots per language, original resolution (`=s0`), from the pages `play_store.py` saved | The Japanese listing is a separate product, *Stone Strike Online* (idle RPG), with its own 11 screenshots |
+| App Store | iPhone and iPad screenshots, original resolution, plus description and release notes in `corpus/appstore/` | Through Apple's documented iTunes Search API; the store's web pages are not scraped |
+| Wayback Machine | One archived Play listing per month (2018 onward): its screenshots and its full text in `corpus/play/history/` | Shows how the game's screens, pitch and patch notes changed. Old images come from Google if still live, else from the archive |
+| Reddit links | Images, imgur clips (`.gifv` saved as `.mp4`), Reddit-hosted video (video and audio as separate files; join with `ffmpeg -i x.mp4 -i x_audio.mp4 -c copy out.mp4`) | imgur albums give only their cover without a key; set `IMGUR_CLIENT_ID` (free, [register an app](https://api.imgur.com/oauth2/addclient)) for every image. Many 2017–2019 imgur links are deleted |
+| YouTube | One thumbnail per indexed video | The `thumbnail_url` that oEmbed returns. The videos themselves are not downloaded (below) |
+| Wikis | Every uploaded image (`fandom_wiki.py --images`), including the third wiki, *Legend Stone* | Many are item icons and game screenshots |
+| **You** | Whatever you capture with `capture.py` | The only source that is complete, current and full resolution. `session` lets you label each shot as you go ("forge result", "clan raid lobby"); `record 120` takes video. If the game refuses to run with USB debugging on, use the phone's screenshot and screen-record buttons (or `scrcpy --record`, which keeps audio) and `capture.py import <folder>` |
+
+**For video, recording your own play is the realistic route.** Almost all GrowStone video is on YouTube, which can't be downloaded (below). Watch it there, and use the video index (`youtube/videos.md`) to find the right clips.
 
 Every `.md` starts with a small header (`source`, `title`, `url`, dates), so each note can be traced back to where it came from.
 
@@ -83,7 +109,10 @@ Every `.md` starts with a small header (`source`, `title`, `url`, dates), so eac
 | Facebook page and groups | Login required; Meta's terms forbid automated collection | Read manually; save notable posts as text |
 | Reddit's own `.json` / `.rss` endpoints and HTML pages, directly or via browser impersonation, proxies or mirrors | Reddit's robots.txt is `Disallow: /` for every bot, its Public Content Policy points researchers to the API and r/reddit4researchers, and `.json` returns 403 without OAuth since May 2026. Disguising traffic to get past that is evading an access control (details in the table above) | Arctic Shift + PullPush (default), or the official API once approved |
 | YouTube without the API: `yt-dlp` metadata or comments, Invidious/Piped instances, scraping search pages or RSS feeds | YouTube's Terms of Service forbid automated access except by search engines following robots.txt or with written permission; robots.txt disallows `/results`, `/comment`, `/feeds/videos.xml` and `/timedtext_video` | oEmbed for linked videos (no key), the free Data API key for search |
-| YouTube video files | YouTube's terms forbid downloading | Watch, and take your own notes and screenshots |
+| YouTube video files (yt-dlp and similar downloaders) | YouTube's terms forbid downloading except through YouTube's own features, even for Creative Commons videos | Watch on YouTube (Premium's in-app offline mode is the sanctioned way to keep a copy), ask the creator for the file, or record your own play with `capture.py` |
+| App Store web pages (`apps.apple.com`), including App Preview videos | Apple's website terms forbid page scraping | `media.py` uses the documented iTunes Search API, which gives screenshots and text but not preview videos |
+| TapTap | Its robots.txt bars AI agents by name | Visit in a browser |
+| Images, UI, sounds or data from inside the game's APK, and the cracked iOS build on archive.org | SUPERCAT's copyrighted assets; the cracked build is pirated | The store screenshots, your own captures, and `apk-teardown.md` (structure only) |
 | Discord, LINE, in-game chat | Private communities | Ask members directly, with permission |
 | Anything behind a login, paywall or bot wall (e.g. chrome-stats returns 403) | Access controls | Visit in a browser |
 

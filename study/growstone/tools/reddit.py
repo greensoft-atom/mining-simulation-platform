@@ -325,7 +325,7 @@ def media_urls(post: dict) -> list[str]:
             if src:
                 urls.append(src)
     elif re.search(r"\.(jpe?g|png|gif|webp)$", post.get("url", ""), re.I) or post.get("domain") in ("i.redd.it", "i.imgur.com"):
-        urls.append(post["url"])
+        urls.append(re.sub(r"\.gifv$", ".mp4", post["url"]))  # imgur .gifv is a player page; the clip is .mp4
     return urls
 
 

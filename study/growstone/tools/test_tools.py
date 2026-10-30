@@ -12,8 +12,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import capture
 import corpus_index
 import import_reviews
+import media
 import play_store
 import reddit
 import web_pages
@@ -184,6 +186,72 @@ class ImportAndIndex(unittest.TestCase):
                 corpus_index.main(["search", "grind", "--corpus", str(corpus)])
             self.assertIn("Too much [grind]", buf.getvalue())
             self.assertIn("1 hit(s)", buf.getvalue())
+
+
+PLAY_NOW = ('<img src="https://play-lh.googleusercontent.com/ICON=w240-h480" alt="Icon image" itemprop="image">'
+            '<img src="https://play-lh.googleusercontent.com/AAA=w526-h296" alt="x" itemprop="image" data-screenshot-index="0">'
+            '<img src="https://play-lh.googleusercontent.com/BBB=w526-h296" alt="x" itemprop="image" data-screenshot-index="1">'
+            '<img src="https://play-lh.googleusercontent.com/AAA=w526-h296" alt="x" itemprop="image" data-screenshot-index="2">')
+PLAY_2018 = ('<img src="https://lh3.googleusercontent.com/ICON=s180" alt="電影海報圖片" itemprop="image">'
+             '<img src="https://lh3.googleusercontent.com/OLD1=w720-h310" alt="螢幕擷取畫面圖片" itemprop="image">'
+             '<img src="https://lh3.googleusercontent.com/SIMILAR=s128" alt="">')
+MPD = ('<MPD><Period><AdaptationSet><Representation bandwidth="590258" id="1"><BaseURL>DASH_600_K</BaseURL></Representation>'
+       '<Representation bandwidth="4364918" id="2"><BaseURL>DASH_4_8_M</BaseURL></Representation></AdaptationSet>'
+       '<AdaptationSet><Representation bandwidth="129820" id="5"><BaseURL>audio</BaseURL></Representation></AdaptationSet></Period></MPD>')
+
+
+class Media(unittest.TestCase):
+    def test_play_screenshots_current_and_2018_layouts(self):
+        host = "play-lh.googleusercontent.com"
+        self.assertEqual(media.play_screenshots(PLAY_NOW), [(host, "AAA"), (host, "BBB")])
+        self.assertEqual(media.play_screenshots(PLAY_2018), [("lh3.googleusercontent.com", "OLD1")])
+
+    def test_appstore_full_size(self):
+        self.assertEqual(media.appstore_full("https://is1-ssl.mzstatic.com/image/thumb/a/pr_source.jpg/392x696bb.jpg", 0),
+                         "https://is1-ssl.mzstatic.com/image/thumb/a/pr_source.jpg/9999x9999bb.jpg")
+
+    def test_reddit_links_and_plans(self):
+        post = {"url": "http://i.imgur.com/BkTrws0.gifv", "selftext": "album http://imgur.com/a/ax26X and "
+                "https://preview.redd.it/abc.png?width=640&amp;s=sig", "comments": [
+                    {"author": "a", "body": "clip https://v.redd.it/45kmn63l5ao11 and https://imgur.com/gallery not this"}]}
+        links = media.reddit_links(post)
+        self.assertEqual([u for _, u in links], ["http://i.imgur.com/BkTrws0.gifv", "http://imgur.com/a/ax26X",
+                                                 "https://preview.redd.it/abc.png?width=640&s=sig",
+                                                 "https://v.redd.it/45kmn63l5ao11", "https://imgur.com/gallery"])
+        self.assertEqual(links[3][0], "comment by u/a")
+        plans = [media.plan_link(u) for _, u in links]
+        self.assertEqual(plans, [("video", "https://i.imgur.com/BkTrws0.mp4"), ("album", "ax26X"),
+                                 ("image", "https://preview.redd.it/abc.png?width=640&s=sig"),
+                                 ("vreddit", "https://v.redd.it/45kmn63l5ao11"), None])
+        self.assertEqual(media.plan_link("https://imgur.com/nRad4da"), ("image", "https://i.imgur.com/nRad4da.jpg"))
+
+    def test_parse_mpd_picks_best_video_and_audio(self):
+        self.assertEqual(media.parse_mpd(MPD), ("DASH_4_8_M", "audio"))
+
+    def test_gallery_merges_identical_groups_and_includes_captures(self):
+        with tempfile.TemporaryDirectory() as d:
+            corpus = Path(d)
+            out = corpus / "media"
+            for name in ("play/AAA.png", "play/BBB.png", "play/KO.png"):
+                (out / name).parent.mkdir(parents=True, exist_ok=True)
+                (out / name).write_bytes(b"x")
+            index = {}
+            for loc, files in (("en-US", ["AAA", "BBB"]), ("de-DE", ["AAA", "BBB"]), ("ko-KR", ["KO"])):
+                for n, f in enumerate(files):
+                    index[f"{loc}|{f}"] = {"section": "play", "group": f"Google Play · {loc}", "file": f"play/{f}.png", "order": n}
+            (out / "index.json").write_text(json.dumps(index), encoding="utf-8")
+            phone = corpus / "phone"
+            phone.mkdir()
+            (phone / "Screenshot_1.png").write_bytes(b"png1")
+            (phone / "dupe.png").write_bytes(b"png1")
+            with contextlib.redirect_stdout(io.StringIO()):
+                added, skipped = capture.import_files(capture.Captures(out / "own"), phone, "Clan <castle>")
+                page = media.write_gallery(out, corpus).read_text(encoding="utf-8")
+            self.assertEqual((added, skipped), (1, 1))
+            self.assertIn("Google Play · de-DE, en-US", page)
+            self.assertIn("Google Play · ko-KR", page)
+            self.assertIn("Clan &lt;castle&gt;", page)
+            self.assertLess(page.index("Your captures"), page.index("Google Play, current listing"))
 
 
 if __name__ == "__main__":
